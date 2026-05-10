@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vehicle Monitoring Dashboard</title>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<style>
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+        color: #fff;
+        min-height: 100vh;
+    }
+
+    header {
+        padding: 20px 40px;
+        font-size: 24px;
+        font-weight: bold;
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    header .live-dot {
+        width: 10px;
+        height: 10px;
+        background: #2ecc71;
+        border-radius: 50%;
+        animation: pulse-dot 1.5s infinite;
+        box-shadow: 0 0 8px #2ecc71;
+    }
+
+    @keyframes pulse-dot {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.4); opacity: 0.6; }
+    }
+
+    .dashboard-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        padding: 30px 40px;
+    }
+
+    @media (max-width: 900px) {
+        .dashboard-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Stats Panel */
+    .stats-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(15px);
+        border-radius: 15px;
+        padding: 22px 25px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        transition: transform 0.3s, box-shadow 0.3s;
+        border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    }
+
+    .card h3 {
+        margin: 0;
+        font-size: 13px;
+        color: #9ab;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .card p {
+        margin: 8px 0 0;
+        font-size: 28px;
+        font-weight: bold;
+    }
+
+    .status {
+        padding: 12px;
+        border-radius: 10px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 14px;
+        margin-top: 6px;
+        letter-spacing: 0.5px;
+    }
+
+    .ok {
+        background: rgba(46, 204, 113, 0.2);
+        color: #2ecc71;
+        border: 1px solid rgba(46,204,113,0.3);
+    }
+
+    .alert {
+        background: rgba(231, 76, 60, 0.2);
+        color: #e74c3c;
+        border: 1px solid rgba(231,76,60,0.3);
+        animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+
+    .coords-info {
+        display: flex;
+        gap: 12px;
+    }
+
+    .coords-info .coord-box {
+        flex: 1;
+        background: rgba(255,255,255,0.06);
+        border-radius: 10px;
+        padding: 14px;
+        text-align: center;
+        border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .coord-box .label {
+        font-size: 11px;
+        color: #8aa;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .coord-box .value {
+        font-size: 18px;
+        font-weight: bold;
+        margin-top: 4px;
+        font-family: 'Courier New', monospace;
+        color: #5dade2;
+    }
+
+    /* Map Panel */
+    .map-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .map-header {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(15px);
+        border-radius: 15px 15px 0 0;
+        padding: 16px 22px;
+        font-size: 16px;
+        font-weight: 600;
+        border: 1px solid rgba(255,255,255,0.07);
+        border-bottom: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .map-header .legend {
+        display: flex;
+        gap: 14px;
+        font-size: 12px;
+        color: #9ab;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .legend-dot.excavation { background: #f39c12; }
+    .legend-dot.dump { background: #e74c3c; }
+    .legend-dot.vehicle { background: #3498db; }
+    .legend-dot.trail { background: #2ecc71; }
+
+    #map {
+        height: 420px;
+        border-radius: 0 0 15px 15px;
+        z-index: 1;
+        border: 1px solid rgba(255,255,255,0.07);
+        border-top: none;
+        cursor: crosshair;
+    }
+
+    .timestamp-bar {
+        margin-top: 12px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 10px;
+        padding: 10px 16px;
+        font-size: 12px;
+        color: #8aa;
+        text-align: center;
+        border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    footer {
+        text-align: center;
+        padding: 15px;
+        font-size: 13px;
+        color: #667;
+    }
+
+    /* Control Buttons */
+    .btn {
+        padding: 10px 18px;
+        border: none;
+        border-radius: 25px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        letter-spacing: 0.5px;
+        color: #fff;
+    }
+
+    .btn:hover {
+        transform: translateY(-2px);
+    }
+
+    .btn-start {
+        background: linear-gradient(135deg, #f39c12, #e67e22);
+        box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
+    }
+
+    .btn-end {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+    }
+
+    .btn-track {
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+        box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+    }
+
+    .btn-track.active {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+        animation: pulse-btn 1.5s infinite;
+    }
+
+    .btn-reset {
+        background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        box-shadow: 0 4px 15px rgba(155, 89, 182, 0.3);
+    }
+
+    .btn.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    @keyframes pulse-btn {
+        0%, 100% { box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3); }
+        50% { box-shadow: 0 4px 25px rgba(231, 76, 60, 0.6); }
+    }
+
+    .controls-bar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 14px 40px;
+        background: rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .controls-bar .status-text {
+        margin-left: auto;
+        font-size: 13px;
+        color: #9ab;
+    }
+
+    .trip-tracker {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+    }
+
+    .trip-tracker .phase {
+        padding: 4px 12px;
+        border-radius: 15px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .phase.at-start {
+        background: rgba(243, 156, 18, 0.2);
+        color: #f39c12;
+        border: 1px solid rgba(243, 156, 18, 0.3);
+    }
+
+    .phase.traveling {
+        background: rgba(52, 152, 219, 0.2);
+        color: #3498db;
+        border: 1px solid rgba(52, 152, 219, 0.3);
+        animation: blink 1.5s infinite;
+    }
+
+    .phase.at-end {
+        background: rgba(46, 204, 113, 0.2);
+        color: #2ecc71;
+        border: 1px solid rgba(46, 204, 113, 0.3);
+    }
+
+    /* Event History Panel */
+    .history-panel {
+        padding: 0 40px 30px;
+    }
+
+    .history-card {
+        background: rgba(255, 255, 255, 0.07);
+        backdrop-filter: blur(15px);
+        border-radius: 15px;
+        border: 1px solid rgba(255,255,255,0.09);
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+
+    .history-header {
+        padding: 18px 24px;
+        background: rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.09);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .history-header h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .history-badge {
+        background: rgba(231, 76, 60, 0.2);
+        color: #e74c3c;
+        border: 1px solid rgba(231,76,60,0.3);
+        border-radius: 20px;
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        min-width: 26px;
+        text-align: center;
+        transition: all 0.3s;
+    }
+
+    .history-badge.no-events {
+        background: rgba(46, 204, 113, 0.15);
+        color: #2ecc71;
+        border-color: rgba(46, 204, 113, 0.3);
+    }
+
+    .history-table-wrap {
+        overflow-x: auto;
+        max-height: 280px;
+        overflow-y: auto;
+    }
+
+    .history-table-wrap::-webkit-scrollbar { width: 5px; height: 5px; }
+    .history-table-wrap::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+    .history-table-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    .history-table thead th {
+        padding: 10px 20px;
+        text-align: left;
+        color: #7a8fa6;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        position: sticky;
+        top: 0;
+        background: rgba(15, 32, 39, 0.95);
+        z-index: 2;
+    }
+
+    .history-table tbody tr {
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        transition: background 0.2s;
+    }
+
+    .history-table tbody tr:hover {
+        background: rgba(255,255,255,0.04);
+    }
+
+    .history-table tbody td {
+        padding: 11px 20px;
+        vertical-align: middle;
+    }
+
+    .event-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .event-badge.route-deviation {
+        background: rgba(231, 76, 60, 0.2);
+        color: #e74c3c;
+        border: 1px solid rgba(231,76,60,0.3);
+    }
+
+    .event-badge.trip-limit {
+        background: rgba(243, 156, 18, 0.2);
+        color: #f39c12;
+        border: 1px solid rgba(243,156,18,0.3);
+    }
+
+    .event-badge.trip-complete {
+        background: rgba(46, 204, 113, 0.2);
+        color: #2ecc71;
+        border: 1px solid rgba(46,204,113,0.3);
+    }
+
+    .history-empty {
+        text-align: center;
+        padding: 40px;
+        color: #556;
+        font-size: 13px;
+    }
+
+    .history-coords {
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        color: #5dade2;
+    }
+
+    .history-time {
+        color: #6a7a8a;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .new-event-flash {
+        animation: rowFlash 1.2s ease;
+    }
+
+    @keyframes rowFlash {
+        0% { background: rgba(52, 152, 219, 0.25); }
+        100% { background: transparent; }
+    }
+</style>
+</head>
+
+<body>
+
+<header>
+    🚚 Smart Vehicle Monitoring Dashboard
+    <div class="live-dot"></div>
+    <span style="font-size:12px; color:#2ecc71; font-weight:normal;">LIVE</span>
+</header>
+
+<!-- Control Bar -->
+<div class="controls-bar">
+    <button id="btnSetStart" class="btn btn-start" onclick="enableSetStart()">📍 Mark Start</button>
+    <button id="btnSetEnd" class="btn btn-end" onclick="enableSetEnd()">🏁 Mark End</button>
+    <button id="btnTrack" class="btn btn-track" onclick="toggleTracking()">📡 Track My Location</button>
+    <button id="btnReset" class="btn btn-reset" onclick="resetTrips()">🔄 Reset Trips</button>
+    <div class="trip-tracker">
+        <span id="phaseLabel" class="phase at-start">READY</span>
+    </div>
+    <span id="controlStatus" class="status-text">Click "Mark Start" to set excavation zone on map</span>
+</div>
+
+<div class="dashboard-layout">
+
+    <!-- Left: Stats -->
+    <div class="stats-panel">
+        <div class="card">
+            <h3>Vehicle ID</h3>
+            <p id="vehicle">--</p>
+        </div>
+
+        <div class="coords-info">
+            <div class="coord-box">
+                <div class="label">Latitude</div>
+                <div class="value" id="lat">--</div>
+            </div>
+            <div class="coord-box">
+                <div class="label">Longitude</div>
+                <div class="value" id="lon">--</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Trips Completed</h3>
+            <p id="trips">0</p>
+        </div>
+
+        <div class="card">
+            <h3>Trip Limit</h3>
+            <p id="limit">0</p>
+        </div>
+
+        <div class="card">
+            <h3>System Status</h3>
+            <div id="status" class="status ok">NORMAL</div>
+        </div>
+    </div>
+
+    <!-- Right: Map -->
+    <div class="map-panel">
+        <div class="map-header">
+            <span>📍 Live GPS Tracking</span>
+            <div class="legend">
+                <span class="legend-item"><span class="legend-dot excavation"></span> Start</span>
+                <span class="legend-item"><span class="legend-dot dump"></span> End</span>
+                <span class="legend-item"><span class="legend-dot vehicle"></span> Vehicle</span>
+                <span class="legend-item"><span class="legend-dot trail"></span> Trail</span>
+            </div>
+        </div>
+        <div id="map"></div>
+        <div class="timestamp-bar">
+            Last update: <span id="lastUpdate">--</span>
+        </div>
+    </div>
+
+</div>
+
+<!-- Event History Panel -->
+<div class="history-panel">
+    <div class="history-card">
+        <div class="history-header">
+            <h2>📋 Event History <span id="historyBadge" class="history-badge no-events">0</span></h2>
+            <span style="font-size:12px; color:#6a7a8a;">Auto-updates · Last 30 events</span>
+        </div>
+        <div class="history-table-wrap" id="historyWrap">
+            <div class="history-empty" id="historyEmpty">🟢 No events yet — violations and trip completions will appear here as the vehicle moves.</div>
+            <table class="history-table" id="historyTable" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Event Type</th>
+                        <th>Detail</th>
+                        <th>Location</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<footer>
+    &copy; 2026 GPS-Based Excavation Monitoring System
+</footer>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// ========================
+//  MAP SETUP
+// ========================
+const map = L.map('map').setView([12.86965, 80.21583], 18);
+
+// Google Maps Satellite + Labels
+L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    attribution: '© Google Maps',
+    maxZoom: 22
+}).addTo(map);
+
+// ========================
+//  ZONE MARKERS & OVERLAYS
+// ========================
+let startMarker = null;
+let endMarker = null;
+let excavationRect = null;
+let dumpRect = null;
+let corridorRect = null;
+
+let startPoint = null;
+let endPoint = null;
+
+// Mode: 'none', 'set-start', 'set-end'
+let clickMode = 'none';
+
+// Vehicle marker
+const vehicleIcon = L.divIcon({
+    html: '<div style="font-size:28px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">🚛</div>',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    className: ''
+});
+let vehicleMarker = L.marker([12.86945, 80.21583], { icon: vehicleIcon }).addTo(map);
+
+// Trail polyline
+let trailLine = L.polyline([], {
+    color: '#2ecc71',
+    weight: 3,
+    opacity: 0.8,
+    smoothFactor: 1
+}).addTo(map);
+
+// ========================
+//  START/END ICONS
+// ========================
+const startIcon = L.divIcon({
+    html: '<div style="font-size:30px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7));">🟠</div>',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    className: ''
+});
+
+const endIcon = L.divIcon({
+    html: '<div style="font-size:30px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7));">🔴</div>',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    className: ''
+});
+
+// ========================
+//  MAP CLICK HANDLER
+// ========================
+map.on('click', function(e) {
+    const lat = e.latlng.lat;
+    const lon = e.latlng.lng;
+
+    if (clickMode === 'set-start') {
+        setStartPoint(lat, lon);
+        clickMode = 'none';
+        document.getElementById('btnSetStart').style.outline = 'none';
+        updateControlStatus();
+    } else if (clickMode === 'set-end') {
+        setEndPoint(lat, lon);
+        clickMode = 'none';
+        document.getElementById('btnSetEnd').style.outline = 'none';
+        updateControlStatus();
+    }
+});
+
+function enableSetStart() {
+    clickMode = 'set-start';
+    document.getElementById('btnSetStart').style.outline = '3px solid #fff';
+    document.getElementById('btnSetEnd').style.outline = 'none';
+    document.getElementById('controlStatus').textContent = '👆 Click on the map to set START (Excavation) point';
+    document.getElementById('controlStatus').style.color = '#f39c12';
+}
+
+function enableSetEnd() {
+    clickMode = 'set-end';
+    document.getElementById('btnSetEnd').style.outline = '3px solid #fff';
+    document.getElementById('btnSetStart').style.outline = 'none';
+    document.getElementById('controlStatus').textContent = '👆 Click on the map to set END (Dump) point';
+    document.getElementById('controlStatus').style.color = '#e74c3c';
+}
+
+function setStartPoint(lat, lon) {
+    startPoint = { lat, lon };
+
+    // Remove old marker/rect
+    if (startMarker) map.removeLayer(startMarker);
+    if (excavationRect) map.removeLayer(excavationRect);
+
+    // Add marker
+    startMarker = L.marker([lat, lon], { icon: startIcon }).addTo(map);
+    startMarker.bindPopup('⛏ START - Excavation Zone').openPopup();
+
+    // Add zone rectangle (~15m radius)
+    const r = 0.0002;  // ~20m radius
+    excavationRect = L.rectangle(
+        [[lat - r, lon - r], [lat + r, lon + r]],
+        { color: '#f39c12', weight: 2, fillOpacity: 0.25, dashArray: '6' }
+    ).addTo(map);
+
+    // Send to backend
+    sendZoneUpdate();
+    updateCorridor();
+}
+
+function setEndPoint(lat, lon) {
+    endPoint = { lat, lon };
+
+    // Remove old marker/rect
+    if (endMarker) map.removeLayer(endMarker);
+    if (dumpRect) map.removeLayer(dumpRect);
+
+    // Add marker
+    endMarker = L.marker([lat, lon], { icon: endIcon }).addTo(map);
+    endMarker.bindPopup('🏁 END - Dump Zone').openPopup();
+
+    // Add zone rectangle (~15m radius)
+    const r = 0.0002;  // ~20m radius
+    dumpRect = L.rectangle(
+        [[lat - r, lon - r], [lat + r, lon + r]],
+        { color: '#e74c3c', weight: 2, fillOpacity: 0.25, dashArray: '6' }
+    ).addTo(map);
+
+    // Send to backend
+    sendZoneUpdate();
+    updateCorridor();
+}
+
+function updateCorridor() {
+    if (!startPoint || !endPoint) return;
+    if (corridorRect) map.removeLayer(corridorRect);
+
+    const latMin = Math.min(startPoint.lat, endPoint.lat) - 0.001;
+    const latMax = Math.max(startPoint.lat, endPoint.lat) + 0.001;
+    const lonMin = Math.min(startPoint.lon, endPoint.lon) - 0.001;
+    const lonMax = Math.max(startPoint.lon, endPoint.lon) + 0.001;
+
+    corridorRect = L.rectangle(
+        [[latMin, lonMin], [latMax, lonMax]],
+        { color: '#3498db', weight: 1, fillOpacity: 0.05, dashArray: '3' }
+    ).addTo(map);
+}
+
+function sendZoneUpdate() {
+    const data = {};
+    if (startPoint) data.start = startPoint;
+    if (endPoint) data.end = endPoint;
+
+    fetch('/set_zones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(res => res.json())
+    .then(result => {
+        console.log('Zones updated:', result);
+    });
+}
+
+function updateControlStatus() {
+    const status = document.getElementById('controlStatus');
+    if (startPoint && endPoint) {
+        status.textContent = '✅ Zones set! Click "Track My Location" to start';
+        status.style.color = '#2ecc71';
+    } else if (startPoint) {
+        status.textContent = '✅ Start set. Now click "Mark End" to set the dump zone';
+        status.style.color = '#f39c12';
+    } else {
+        status.textContent = 'Click "Mark Start" to set excavation zone on map';
+        status.style.color = '#9ab';
+    }
+}
+
+// ========================
+//  BROWSER GPS TRACKING
+// ========================
+let trackingActive = false;
+let watchId = null;
+let lastTripCount = 0;
+
+function toggleTracking() {
+    if (trackingActive) {
+        stopTracking();
+    } else {
+        startTracking();
+    }
+}
+
+function startTracking() {
+    if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser');
+        return;
+    }
+
+    if (!startPoint || !endPoint) {
+        alert('Please mark both Start and End points on the map first!');
+        return;
+    }
+
+    const btn = document.getElementById('btnTrack');
+    const status = document.getElementById('controlStatus');
+
+    btn.textContent = '⏹ Stop Tracking';
+    btn.className = 'btn btn-track active';
+    status.textContent = '📡 Getting location...';
+    status.style.color = '#f39c12';
+    trackingActive = true;
+
+    watchId = navigator.geolocation.watchPosition(
+        function(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+
+            status.textContent = '📡 Tracking active (' + accuracy.toFixed(0) + 'm accuracy)';
+            status.style.color = '#2ecc71';
+
+            // Move vehicle marker
+            vehicleMarker.setLatLng([lat, lon]);
+
+            // Update coordinates display
+            document.getElementById('lat').innerText = lat.toFixed(6);
+            document.getElementById('lon').innerText = lon.toFixed(6);
+
+            // Send to backend
+            sendBrowserGPS(lat, lon);
+        },
+        function(error) {
+            status.textContent = 'Error: ' + error.message;
+            status.style.color = '#e74c3c';
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 1000,
+            timeout: 10000
+        }
+    );
+}
+
+function stopTracking() {
+    if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+
+    const btn = document.getElementById('btnTrack');
+    const status = document.getElementById('controlStatus');
+    btn.textContent = '📡 Track My Location';
+    btn.className = 'btn btn-track';
+    status.textContent = 'Tracking stopped';
+    status.style.color = '#9ab';
+    trackingActive = false;
+}
+
+function sendBrowserGPS(lat, lon) {
+    const data = {
+        vehicle_id: 'TN09AB1234',
+        latitude: lat,
+        longitude: lon,
+        timestamp: new Date().toISOString()
+    };
+
+    fetch('/send_gps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(res => res.json())
+    .then(result => {
+        console.log('GPS sent:', lat.toFixed(6), lon.toFixed(6), '->', result.status, 'Trips:', result.trip_count);
+
+        // Check for new trip completion
+        if (result.trip_count > lastTripCount) {
+            lastTripCount = result.trip_count;
+            showTripAlert(result.trip_count);
+        }
+
+        // Check for violation
+        if (result.status === 'VIOLATION DETECTED') {
+            showViolationAlert(result.trip_count);
+        }
+    })
+    .catch(err => console.error('Send failed:', err));
+}
+
+function showTripAlert(tripCount) {
+    // Visual notification
+    const statusDiv = document.getElementById('status');
+    statusDiv.innerText = '🏁 TRIP ' + tripCount + ' COMPLETED!';
+    statusDiv.className = 'status alert';
+    statusDiv.style.background = 'rgba(46, 204, 113, 0.3)';
+    statusDiv.style.color = '#2ecc71';
+    statusDiv.style.border = '1px solid rgba(46, 204, 113, 0.5)';
+
+    // Alert popup
+    alert('🏁 TRIP ' + tripCount + ' COMPLETED!\n\nThe vehicle has completed trip #' + tripCount + '.');
+
+    // Reset style after 3 seconds
+    setTimeout(() => {
+        statusDiv.style.background = '';
+        statusDiv.style.color = '';
+        statusDiv.style.border = '';
+    }, 3000);
+}
+
+function showViolationAlert(tripCount) {
+    const statusDiv = document.getElementById('status');
+    statusDiv.innerText = '🚨 VIOLATION DETECTED!';
+    statusDiv.className = 'status alert';
+
+    alert('🚨 VIOLATION ALERT!\n\nTrip limit exceeded!\nTrips completed: ' + tripCount + '\n\nImmediate action required!');
+}
+
+// ========================
+//  RESET TRIPS
+// ========================
+function resetTrips() {
+    fetch('/reset_trips', { method: 'POST' })
+        .then(res => res.json())
+        .then(result => {
+            console.log('Trips reset:', result);
+            lastTripCount = 0;
+            document.getElementById('trips').innerText = '0';
+            document.getElementById('status').innerText = '✔ NORMAL OPERATION';
+            document.getElementById('status').className = 'status ok';
+            document.getElementById('phaseLabel').textContent = 'READY';
+            document.getElementById('phaseLabel').className = 'phase at-start';
+            document.getElementById('controlStatus').textContent = '🔄 Trips reset! Ready for new test.';
+            document.getElementById('controlStatus').style.color = '#9b59b6';
+        });
+}
+
+// ========================
+//  DASHBOARD DATA POLLING
+// ========================
+let violationAlerted = false;
+
+function loadDashboard() {
+    fetch("/dashboard_data")
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById("vehicle").innerText = data.vehicle_id;
+            document.getElementById("trips").innerText = data.trip_count;
+            document.getElementById("limit").innerText = data.trip_limit;
+
+            // Update phase indicator
+            const phaseLabel = document.getElementById('phaseLabel');
+            if (data.trip_violation || data.route_violation) {
+                phaseLabel.textContent = '⚠ VIOLATION';
+                phaseLabel.className = 'phase';
+                phaseLabel.style.background = 'rgba(231, 76, 60, 0.2)';
+                phaseLabel.style.color = '#e74c3c';
+                phaseLabel.style.border = '1px solid rgba(231, 76, 60, 0.3)';
+            } else if (data.trip_active) {
+                phaseLabel.textContent = '🚛 TRAVELING TO END';
+                phaseLabel.className = 'phase traveling';
+            } else if (data.in_excavation) {
+                phaseLabel.textContent = '📍 AT START ZONE';
+                phaseLabel.className = 'phase at-start';
+            }
+
+            const statusDiv = document.getElementById("status");
+            if (data.trip_violation || data.route_violation) {
+                statusDiv.innerText = "⚠ VIOLATION DETECTED";
+                statusDiv.className = "status alert";
+            } else {
+                statusDiv.innerText = "✔ NORMAL OPERATION";
+                statusDiv.className = "status ok";
+            }
+        });
+}
+
+// GPS Location Update (from server)
+function updateLocation() {
+    fetch("/gps_location")
+        .then(res => res.json())
+        .then(data => {
+            if (!trackingActive) {
+                const lat = data.latitude;
+                const lon = data.longitude;
+                vehicleMarker.setLatLng([lat, lon]);
+                document.getElementById("lat").innerText = lat.toFixed(6);
+                document.getElementById("lon").innerText = lon.toFixed(6);
+            }
+            document.getElementById("lastUpdate").innerText = data.timestamp;
+        });
+}
+
+// GPS Trail
+function updateTrail() {
+    fetch("/gps_history")
+        .then(res => res.json())
+        .then(data => {
+            if (data.history && data.history.length > 0) {
+                const coords = data.history.map(p => [p.latitude, p.longitude]);
+                trailLine.setLatLngs(coords);
+            }
+        });
+}
+
+// ========================
+//  INITIAL LOAD
+// ========================
+loadDashboard();
+updateLocation();
+updateTrail();
+loadEventHistory();
+
+setInterval(loadDashboard, 3000);
+setInterval(updateLocation, 2000);
+setInterval(updateTrail, 5000);
+setInterval(loadEventHistory, 4000);
+
+// Center map on user's location if available
+if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+        map.setView([pos.coords.latitude, pos.coords.longitude], 18);
+    }, function() {
+        // Keep default view if denied
+    }, { timeout: 5000 });
+}
+
+// ========================
+//  EVENT HISTORY
+// ========================
+let lastEventCount = 0;
+
+const EVENT_META = {
+    'ROUTE_DEVIATION':      { label: '🚨 Route Deviation',      cls: 'route-deviation' },
+    'TRIP_LIMIT_EXCEEDED':  { label: '⚠️ Trip Limit Exceeded', cls: 'trip-limit'      },
+    'TRIP_COMPLETE':        { label: '✅ Trip Complete',         cls: 'trip-complete'   }
+};
+
+function formatHistoryTime(isoStr) {
+    try {
+        const d = new Date(isoStr);
+        return d.toLocaleString('en-IN', {
+            hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit',
+            day: '2-digit', month: 'short'
+        });
+    } catch(e) { return isoStr; }
+}
+
+function loadEventHistory() {
+    fetch('/event_history')
+        .then(res => res.json())
+        .then(data => {
+            const events = data.events || [];
+            const badge  = document.getElementById('historyBadge');
+            const empty  = document.getElementById('historyEmpty');
+            const table  = document.getElementById('historyTable');
+            const tbody  = document.getElementById('historyBody');
+
+            badge.textContent = events.length;
+
+            if (events.length === 0) {
+                badge.className  = 'history-badge no-events';
+                empty.style.display = 'block';
+                table.style.display = 'none';
+                return;
+            }
+
+            badge.className  = 'history-badge';
+            empty.style.display = 'none';
+            table.style.display = 'table';
+
+            const isNew = events.length > lastEventCount;
+            lastEventCount = events.length;
+
+            tbody.innerHTML = '';
+            events.forEach((ev, idx) => {
+                const meta = EVENT_META[ev.event_type] || { label: ev.event_type, cls: '' };
+                const tr = document.createElement('tr');
+                if (isNew && idx === 0) tr.className = 'new-event-flash';
+                tr.innerHTML =
+                    '<td style="color:#556;font-size:11px;">' + (events.length - idx) + '</td>' +
+                    '<td><span class="event-badge ' + meta.cls + '">' + meta.label + '</span></td>' +
+                    '<td style="color:#c5d8e8;">' + ev.detail + '</td>' +
+                    '<td class="history-coords">' + ev.latitude.toFixed(6) + ', ' + ev.longitude.toFixed(6) + '</td>' +
+                    '<td class="history-time">' + formatHistoryTime(ev.recorded_time) + '</td>';
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('historyWrap').scrollTop = 0;
+        })
+        .catch(err => console.error('Event history fetch failed:', err));
+}
+</script>
+
+
+</body>
+</html>
