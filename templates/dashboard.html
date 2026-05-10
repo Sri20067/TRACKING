@@ -1003,12 +1003,56 @@ function updateTrail() {
         });
 }
 
+// Load Zones from DB
+function loadZones() {
+    fetch("/get_zones")
+        .then(res => res.json())
+        .then(data => {
+            const exc = data.excavation;
+            const dmp = data.dump;
+            const cor = data.corridor;
+
+            if (exc && exc.lat_min) {
+                const lat = (exc.lat_min + exc.lat_max) / 2;
+                const lon = (exc.lon_min + exc.lon_max) / 2;
+                startPoint = { lat, lon };
+                if (startMarker) map.removeLayer(startMarker);
+                if (excavationRect) map.removeLayer(excavationRect);
+                startMarker = L.marker([lat, lon], { icon: startIcon }).addTo(map);
+                startMarker.bindPopup('⛏ START - Excavation Zone').openPopup();
+                excavationRect = L.rectangle([[exc.lat_min, exc.lon_min], [exc.lat_max, exc.lon_max]], { color: '#f39c12', weight: 2, fillOpacity: 0.25, dashArray: '6' }).addTo(map);
+            }
+
+            if (dmp && dmp.lat_min) {
+                const lat = (dmp.lat_min + dmp.lat_max) / 2;
+                const lon = (dmp.lon_min + dmp.lon_max) / 2;
+                endPoint = { lat, lon };
+                if (endMarker) map.removeLayer(endMarker);
+                if (dumpRect) map.removeLayer(dumpRect);
+                endMarker = L.marker([lat, lon], { icon: endIcon }).addTo(map);
+                endMarker.bindPopup('🏁 END - Dump Zone').openPopup();
+                dumpRect = L.rectangle([[dmp.lat_min, dmp.lon_min], [dmp.lat_max, dmp.lon_max]], { color: '#e74c3c', weight: 2, fillOpacity: 0.25, dashArray: '6' }).addTo(map);
+            }
+
+            if (cor && cor.lat_min) {
+                if (corridorRect) map.removeLayer(corridorRect);
+                corridorRect = L.rectangle([[cor.lat_min, cor.lon_min], [cor.lat_max, cor.lon_max]], { color: '#3498db', weight: 1, fillOpacity: 0.05, dashArray: '3' }).addTo(map);
+            }
+            
+            // Adjust map view to fit the corridor if both points exist
+            if (cor && cor.lat_min) {
+                map.fitBounds([[cor.lat_min, cor.lon_min], [cor.lat_max, cor.lon_max]]);
+            }
+        });
+}
+
 // ========================
 //  INITIAL LOAD
 // ========================
 loadDashboard();
 updateLocation();
 updateTrail();
+loadZones();
 loadEventHistory();
 
 setInterval(loadDashboard, 3000);
