@@ -95,7 +95,7 @@ def main():
     mid_pts = [(mid_lat1, mid_lon1), (mid_lat2, mid_lon2)]
 
     print(f"Vehicle   : {VEHICLE_ID}")
-    print(f"Simulating: 2 trips to test violation (Max = 1)")
+    print(f"Simulating: 6 trips to test violation (Max = 5)")
     print("-" * 55)
 
     try:
@@ -105,7 +105,7 @@ def main():
     except Exception as e:
         print(f"Reset failed: {e}")
 
-    for trip in range(1, 3):
+    for trip in range(1, 7):
         result = simulate_one_trip(trip, start_pt, mid_pts, end_pt)
         status = result.get("status", "")
 

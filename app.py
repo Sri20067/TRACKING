@@ -94,7 +94,7 @@ def create_tables():
 registered_vehicles = {
     "TN09AB1234": {
         "permit_id": "PERMIT001",
-        "max_trips": 1,
+        "max_trips": 5,
         "active": True
     }
 }
